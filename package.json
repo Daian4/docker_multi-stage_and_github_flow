@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "API Node.js com Docker multi-stage",
   "main": "src/app.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Daian4/docker_multi-stage_and_github_flow.git"
+  },
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js"
@@ -14,6 +18,26 @@
     "express": "^5.1.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^10.0.3",
+    "semantic-release": "^23.0.2"
+  },
+  "release": {
+    "branches": ["main"],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/changelog",
+      "@semantic-release/github",
+      [
+        "@semantic-release/git",
+        {
+          "assets": ["CHANGELOG.md", "package.json"],
+          "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        }
+      ]
+    ]
   }
 }
