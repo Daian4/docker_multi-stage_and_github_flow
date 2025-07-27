@@ -1,13 +1,19 @@
-name: Release
+name: Hybrid Release
 
 on:
   push:
     branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    name: 🚀 Create Release
+    name: 🚀 Hybrid Release Pipeline
 
     steps:
       - name: Checkout code
@@ -20,53 +26,47 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Get next version
-        id: semver
-        uses: ietf-tools/semver-action@v1
-        with:
-          token: ${{ github.token }}
-          branch: main
-
-      - name: Create Release
-        uses: ncipollo/create-release-action@v1.14.0
-        with:
-          allowUpdates: true
-          draft: false
-          makeLatest: true
-          name: ${{ steps.semver.outputs.next }}
-          body: |
-            ## 🚀 Release ${{ steps.semver.outputs.next }}
-
-            ### 📝 Changes in this release
-            - Automated release from main branch
-            - Docker image built and pushed to GHCR
-            - Version: ${{ steps.semver.outputs.next }}
-
-            ### 🐳 Docker Image
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ steps.semver.outputs.next }}
-            docker pull ghcr.io/${{ github.repository }}:latest
-            ```
-
-          tag: ${{ steps.semver.outputs.next }}
-          token: ${{ github.token }}
-
-      - name: Update CHANGELOG
+      - name: Check if manual tag exists
+        id: check_tag
         run: |
-          echo "# Changelog" > CHANGELOG.md
-          echo "" >> CHANGELOG.md
-          echo "## [${{ steps.semver.outputs.next }}] - $(date +'%Y-%m-%d')" >> CHANGELOG.md
-          echo "" >> CHANGELOG.md
-          echo "### Added" >> CHANGELOG.md
-          echo "- Automated CI/CD pipeline" >> CHANGELOG.md
-          echo "- Docker multi-stage build" >> CHANGELOG.md
-          echo "- Automated releases" >> CHANGELOG.md
-          echo "" >> CHANGELOG.md
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "manual_tag=true" >> $GITHUB_OUTPUT
+            echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+            echo "⚠️ Detected manual tag: ${GITHUB_REF_NAME}"
+          else
+            echo "manual_tag=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No manual tag detected, will use semantic-release"
+          fi
 
-      - name: Commit CHANGELOG
+      - name: Semantic Release (Auto Version)
+        if: steps.check_tag.outputs.manual_tag == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      - name: Generate Changelog (Manual Tag)
+        if: steps.check_tag.outputs.manual_tag == 'true'
+        id: cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          args: --verbose --tag ${{ steps.check_tag.outputs.version }}
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Create GitHub Release (Manual Tag)
+        if: steps.check_tag.outputs.manual_tag == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: CHANGELOG.md
+          tag_name: ${{ steps.check_tag.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: deploy
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add CHANGELOG.md
-          git diff --staged --quiet || git commit -m "docs: update CHANGELOG for ${{ steps.semver.outputs.next }}"
-          git push origin main
+          echo "🚀 Deploy realizado com a versão:"
+          if [[ "${{ steps.check_tag.outputs.manual_tag }}" == "true" ]]; then
+            echo "${{ steps.check_tag.outputs.version }}"
+          else
+            echo "Versão gerada automaticamente pelo semantic-release"
+          fi
